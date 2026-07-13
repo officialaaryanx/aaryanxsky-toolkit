@@ -7,7 +7,7 @@ dependencies beyond what's already in Kali (or a one-line `apt install`).
 ## One-line install (after pushing this repo to GitHub)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/aaryanxsky-toolkit/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/officialaaryanx/aaryanxsky-toolkit/main/install.sh | bash
 ```
 
 This clones the repo, installs the tool as `aaryanxsky` in `/usr/local/bin`,
