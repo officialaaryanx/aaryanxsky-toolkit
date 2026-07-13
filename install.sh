@@ -7,7 +7,7 @@
 
 set -e
 
-REPO_URL="https://github.com/YOUR_USERNAME/aaryanxsky-toolkit.git"
+REPO_URL="https://github.com/officialaaryanx/aaryanxsky-toolkit.git"
 INSTALL_DIR="/tmp/aaryanxsky-toolkit-install"
 TARGET_BIN="/usr/local/bin/aaryanxsky"
 SCRIPT_NAME="aaryanxsky-toolkit.sh"
