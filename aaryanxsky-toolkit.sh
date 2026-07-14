@@ -34,6 +34,59 @@ pause() {
     read -rp "Press Enter to return to menu..." _
 }
 
+# type_effect <text> [delay] — typewriter-style print for hacker feel
+type_effect() {
+    local text="$1"
+    local delay="${2:-0.012}"
+    for ((i=0; i<${#text}; i++)); do
+        printf "%s" "${text:$i:1}"
+        sleep "$delay"
+    done
+    echo
+}
+
+# loading_bar <label> [seconds]
+loading_bar() {
+    local label="$1"
+    local secs="${2:-2}"
+    local width=30
+    printf "${CYAN}%s${NC} [" "$label"
+    for ((i=0; i<width; i++)); do
+        printf "${GREEN}#${NC}"
+        sleep "$(echo "$secs / $width" | bc -l 2>/dev/null || echo 0.05)"
+    done
+    printf "] 100%%\n"
+}
+
+# print_box <title> <content...> — bordered highlight box for key results
+print_box() {
+    local title="$1"; shift
+    local width=63
+    echo -e "${GREEN}╔$(printf '═%.0s' $(seq 1 $width))╗${NC}"
+    printf "${GREEN}║${NC} ${BOLD}${CYAN}%-*s${NC}${GREEN}║${NC}\n" $((width-1)) "$title"
+    echo -e "${GREEN}╠$(printf '═%.0s' $(seq 1 $width))╣${NC}"
+    for line in "$@"; do
+        printf "${GREEN}║${NC} %-*s${GREEN}║${NC}\n" $((width-1)) "$line"
+    done
+    echo -e "${GREEN}╚$(printf '═%.0s' $(seq 1 $width))╝${NC}"
+}
+
+boot_sequence() {
+    clear
+    echo -e "${GREEN}"
+    if command -v cmatrix >/dev/null 2>&1; then
+        timeout 2 cmatrix -s 2>/dev/null
+    fi
+    clear
+    echo -e "${GREEN}${BOLD}"
+    type_effect ">> initializing aaryanxsky-core..." 0.015
+    type_effect ">> loading recon modules [whois|theHarvester|exiftool|nmap|aircrack-ng]..." 0.008
+    type_effect ">> mounting loot directory: $LOOT_DIR" 0.008
+    type_effect ">> access granted." 0.02
+    sleep 0.3
+    echo -e "${NC}"
+}
+
 banner() {
     clear
     echo -e "${GREEN}${BOLD}"
@@ -45,9 +98,9 @@ banner() {
                 |__/                        |__/
 EOF
     echo -e "${NC}${CYAN}          ${TOOL_NAME}${NC}"
-    echo -e "${YELLOW}   OSINT / Recon / Forensics — Kali-native edition${NC}"
-    echo -e "   Log: $LOG_FILE"
-    echo "-------------------------------------------------------------"
+    echo -e "${YELLOW}   [ROOT@GEOINT] OSINT / Recon / Forensics — Kali-native edition${NC}"
+    echo -e "${GREEN}   Log:${NC} $LOG_FILE"
+    echo -e "${GREEN}-------------------------------------------------------------${NC}"
 }
 
 need() {
@@ -65,6 +118,73 @@ need() {
     return 0
 }
 
+# ---------- Map helper ----------
+# show_on_map <lat> <lon> <label>
+# Generates a small Leaflet HTML map pinned at the given coordinates
+# and opens it in the default browser.
+show_on_map() {
+    local lat="$1" lon="$2" label="$3"
+    [[ -z "$lat" || -z "$lon" ]] && return 1
+
+    print_box "COORDINATES LOCKED" "TARGET : ${label}" "LAT    : ${lat}" "LON    : ${lon}"
+
+    local mapfile="$LOOT_DIR/map_$(date +%s).html"
+    cat > "$mapfile" << MAPEOF
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>AaryanXSky — GeoTrace</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --g:#00ff66; }
+    body { margin:0; font-family:'Courier New', monospace; background:#050505; color:var(--g); }
+    #hud {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:10px 18px; border-bottom:1px solid rgba(0,255,102,0.4);
+      background:rgba(0,0,0,0.9); text-shadow:0 0 6px rgba(0,255,102,0.6);
+      letter-spacing:1px; font-size:14px;
+    }
+    #hud .blink { animation: blink 1s steps(2) infinite; }
+    @keyframes blink { 50% { opacity:0; } }
+    #map { height: calc(100vh - 46px); width: 100%; filter: saturate(0.6) contrast(1.1); }
+    .leaflet-popup-content-wrapper { background:#0d0d0d; color:var(--g); border:1px solid var(--g); }
+    .leaflet-popup-tip { background:#0d0d0d; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div>[GEOTRACE] TARGET: ${label//\"/}</div>
+    <div>LAT ${lat} / LON ${lon} <span class="blink">●</span> LIVE</div>
+  </div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([${lat}, ${lon}], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    const crosshair = L.divIcon({
+      className: '', iconSize: [26,26],
+      html: '<div style="width:26px;height:26px;border:2px solid #00ff66;border-radius:50%;box-shadow:0 0 12px #00ff66;position:relative;"><div style="position:absolute;top:50%;left:-6px;width:38px;height:1px;background:#00ff66;"></div><div style="position:absolute;left:50%;top:-6px;height:38px;width:1px;background:#00ff66;"></div></div>'
+    });
+    L.marker([${lat}, ${lon}], {icon: crosshair}).addTo(map)
+      .bindPopup("TARGET LOCKED<br>${label//\"/}<br>${lat}, ${lon}").openPopup();
+  </script>
+</body>
+</html>
+MAPEOF
+
+    echo -e "${GREEN}[+] Map saved:${NC} $mapfile"
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$mapfile" >/dev/null 2>&1 &
+    elif command -v sensible-browser >/dev/null 2>&1; then
+        sensible-browser "$mapfile" >/dev/null 2>&1 &
+    else
+        echo "Open it manually in a browser: $mapfile"
+    fi
+}
+
 # ---------- Dependency check ----------
 check_all_deps() {
     banner
@@ -80,6 +200,9 @@ check_all_deps() {
         [airodump-ng]=aircrack-ng
         [python3]=python3
         [curl]=curl
+        [traceroute]=traceroute
+        [hashid]=hashid
+        [sublist3r]=sublist3r
     )
     for bin in "${!tools[@]}"; do
         if command -v "$bin" >/dev/null 2>&1; then
@@ -93,7 +216,8 @@ check_all_deps() {
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         sudo apt update
         sudo apt install -y whois geoip-bin theharvester dnsenum \
-            libimage-exiftool-perl nmap aircrack-ng python3 curl
+            libimage-exiftool-perl nmap aircrack-ng python3 curl \
+            traceroute hashid sublist3r
     fi
     pause
 }
@@ -107,6 +231,7 @@ ip_intel() {
 
     need whois whois || { pause; return; }
     outfile="$LOOT_DIR/ip_${ip//[:.]/_}_$(date +%s).txt"
+    loading_bar "Tracing $ip" 1.5
 
     {
         echo "=== WHOIS for $ip ==="
@@ -117,6 +242,19 @@ ip_intel() {
             geoiplookup "$ip"
         fi
     } | tee "$outfile"
+
+    # Fetch precise lat/lon for map pin (free, no API key)
+    if command -v curl >/dev/null 2>&1; then
+        geo=$(curl -s "http://ip-api.com/json/${ip}?fields=status,lat,lon,city,country")
+        lat=$(echo "$geo" | grep -oP '"lat":\s*\K[-0-9.]+')
+        lon=$(echo "$geo" | grep -oP '"lon":\s*\K[-0-9.]+')
+        city=$(echo "$geo" | grep -oP '"city":\s*"\K[^"]+')
+        country=$(echo "$geo" | grep -oP '"country":\s*"\K[^"]+')
+        if [[ -n "$lat" && -n "$lon" ]]; then
+            echo -e "\n${YELLOW}Location:${NC} $city, $country ($lat, $lon)"
+            show_on_map "$lat" "$lon" "IP: $ip ($city, $country)"
+        fi
+    fi
 
     log_action "ip_intel target=$ip saved=$outfile"
     echo -e "\n${GREEN}Saved to $outfile${NC}"
@@ -131,6 +269,7 @@ domain_recon() {
     [[ -z "$domain" ]] && { echo "No domain given."; pause; return; }
 
     outfile="$LOOT_DIR/domain_${domain}_$(date +%s).txt"
+    loading_bar "Scanning $domain" 1.5
 
     {
         echo "=== WHOIS for $domain ==="
@@ -149,6 +288,20 @@ domain_recon() {
     read -rp "Run dnsenum too? (can be noisy/active) [y/N] " ans
     if [[ "$ans" =~ ^[Yy]$ ]] && need dnsenum dnsenum; then
         dnsenum "$domain" | tee -a "$outfile"
+    fi
+
+    # Resolve to an IP and show it on the map
+    resolved_ip=$(getent hosts "$domain" | awk '{print $1}' | head -n1)
+    if [[ -n "$resolved_ip" ]] && command -v curl >/dev/null 2>&1; then
+        geo=$(curl -s "http://ip-api.com/json/${resolved_ip}?fields=status,lat,lon,city,country")
+        lat=$(echo "$geo" | grep -oP '"lat":\s*\K[-0-9.]+')
+        lon=$(echo "$geo" | grep -oP '"lon":\s*\K[-0-9.]+')
+        city=$(echo "$geo" | grep -oP '"city":\s*"\K[^"]+')
+        country=$(echo "$geo" | grep -oP '"country":\s*"\K[^"]+')
+        if [[ -n "$lat" && -n "$lon" ]]; then
+            echo -e "\n${YELLOW}Location:${NC} $city, $country ($lat, $lon)"
+            show_on_map "$lat" "$lon" "$domain ($resolved_ip) — $city, $country"
+        fi
     fi
 
     log_action "domain_recon target=$domain saved=$outfile"
@@ -173,6 +326,15 @@ exif_forensics() {
     echo
     echo -e "${YELLOW}-- GPS fields only --${NC}"
     exiftool -gpslatitude -gpslongitude -gpsposition "$img"
+
+    # Extract decimal lat/lon and show on map if present
+    lat=$(exiftool -c "%+.6f" -GPSLatitude -n -s3 "$img" 2>/dev/null)
+    lon=$(exiftool -c "%+.6f" -GPSLongitude -n -s3 "$img" 2>/dev/null)
+    if [[ -n "$lat" && -n "$lon" ]]; then
+        show_on_map "$lat" "$lon" "EXIF GPS — $(basename "$img")"
+    else
+        echo -e "${YELLOW}No GPS data found in this image.${NC}"
+    fi
 
     log_action "exif_forensics file=$img saved=$outfile"
     echo -e "\n${GREEN}Saved to $outfile${NC}"
@@ -322,7 +484,123 @@ canary_menu() {
     done
 }
 
-# ---------- 7. Audit / Loot log ----------
+# ---------- 7. Subdomain Enumeration ----------
+subdomain_enum() {
+    banner
+    echo -e "${CYAN}== Subdomain Enumeration ==${NC}"
+    read -rp "Enter root domain (e.g. example.com): " domain
+    [[ -z "$domain" ]] && { echo "No domain given."; pause; return; }
+
+    outfile="$LOOT_DIR/subdomains_${domain}_$(date +%s).txt"
+    loading_bar "Enumerating subdomains" 2
+
+    if command -v sublist3r >/dev/null 2>&1; then
+        sublist3r -d "$domain" -o "$outfile"
+        cat "$outfile"
+    elif command -v assetfinder >/dev/null 2>&1; then
+        assetfinder --subs-only "$domain" | tee "$outfile"
+    else
+        echo -e "${YELLOW}Neither sublist3r nor assetfinder found.${NC}"
+        echo "Falling back to certificate-transparency lookup (crt.sh)..."
+        curl -s "https://crt.sh/?q=%25.${domain}&output=json" \
+            | grep -oP '"name_value":"\K[^"]+' | sort -u | tee "$outfile"
+    fi
+
+    log_action "subdomain_enum target=$domain saved=$outfile"
+    echo -e "\n${GREEN}Saved to $outfile${NC}"
+    pause
+}
+
+# ---------- 8. MAC Address Vendor Lookup ----------
+mac_lookup() {
+    banner
+    echo -e "${CYAN}== MAC Address Vendor Lookup ==${NC}"
+    read -rp "Enter MAC address (e.g. AA:BB:CC:00:11:22): " mac
+    [[ -z "$mac" ]] && { echo "No MAC given."; pause; return; }
+    loading_bar "Resolving vendor" 1
+
+    result=$(curl -s "https://api.macvendors.com/${mac}")
+    if [[ "$result" == *"errors"* || -z "$result" ]]; then
+        echo -e "${RED}Vendor not found or API unreachable.${NC}"
+    else
+        print_box "VENDOR MATCH" "MAC    : ${mac}" "VENDOR : ${result}"
+    fi
+
+    log_action "mac_lookup target=$mac result=$result"
+    pause
+}
+
+# ---------- 9. Traceroute / Network Path ----------
+trace_path() {
+    banner
+    echo -e "${CYAN}== Network Path Trace ==${NC}"
+    read -rp "Enter target IP or host: " target
+    [[ -z "$target" ]] && { echo "No target given."; pause; return; }
+    need traceroute traceroute || { pause; return; }
+
+    outfile="$LOOT_DIR/traceroute_${target//[:.]/_}_$(date +%s).txt"
+    loading_bar "Tracing route" 2
+    traceroute "$target" | tee "$outfile"
+
+    log_action "trace_path target=$target saved=$outfile"
+    echo -e "\n${GREEN}Saved to $outfile${NC}"
+    pause
+}
+
+# ---------- 10. Hash Identifier ----------
+hash_identify() {
+    banner
+    echo -e "${CYAN}== Hash Identifier ==${NC}"
+    read -rp "Enter hash string: " hash
+    [[ -z "$hash" ]] && { echo "No hash given."; pause; return; }
+
+    if need hashid hashid; then
+        hashid "$hash"
+    else
+        len=${#hash}
+        echo "Hash length: $len characters"
+        case $len in
+            32) echo "Likely: MD5 / NTLM" ;;
+            40) echo "Likely: SHA1" ;;
+            64) echo "Likely: SHA256" ;;
+            128) echo "Likely: SHA512" ;;
+            *) echo "Unrecognized length — install hashid for full detection." ;;
+        esac
+    fi
+
+    log_action "hash_identify hash_len=${#hash}"
+    pause
+}
+
+# ---------- 11. HTML Report Generator ----------
+generate_report() {
+    banner
+    echo -e "${CYAN}== Generating Full Report ==${NC}"
+    loading_bar "Compiling loot" 2
+    report="$LOOT_DIR/report_$(date +%s).html"
+
+    {
+        echo "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+        echo "<title>AaryanXSky — Recon Report</title>"
+        echo "<style>body{background:#0d0d0d;color:#00ff66;font-family:monospace;padding:24px;}"
+        echo "h1{border-bottom:1px solid #00ff66;padding-bottom:8px;}"
+        echo "pre{background:#111;padding:12px;border:1px solid #033;overflow-x:auto;}"
+        echo "h2{color:#00e5ff;margin-top:32px;}</style></head><body>"
+        echo "<h1>AaryanXSky Recon Report — $(date -u +'%Y-%m-%d %H:%M UTC')</h1>"
+        for f in "$LOOT_DIR"/*.txt; do
+            [[ -e "$f" ]] || continue
+            echo "<h2>$(basename "$f")</h2><pre>$(sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$f")</pre>"
+        done
+        echo "</body></html>"
+    } > "$report"
+
+    log_action "generate_report saved=$report"
+    echo -e "${GREEN}Report saved:${NC} $report"
+    command -v xdg-open >/dev/null 2>&1 && xdg-open "$report" >/dev/null 2>&1 &
+    pause
+}
+
+# ---------- Audit / Loot log ----------
 view_audit_log() {
     banner
     echo -e "${CYAN}== Audit Log ==${NC}"
@@ -355,18 +633,23 @@ export_all() {
 main_menu() {
     while true; do
         banner
-        echo "1) IP Intelligence          (whois + geoip)"
-        echo "2) Domain Recon              (theHarvester + whois + dnsenum)"
-        echo "3) EXIF Forensics            (exiftool)"
-        echo "4) Port / Service Scan       (nmap)"
-        echo "5) Wi-Fi / BSSID Recon       (aircrack-ng)"
-        echo "6) Canary Token              (generate / listen / logs)"
-        echo "7) View Audit Log"
-        echo "8) View Loot Directory"
-        echo "9) Export Everything (.zip)"
-        echo "d) Check / Install Dependencies"
-        echo "0) Exit"
-        echo "-------------------------------------------------------------"
+        echo "1)  IP Intelligence          (whois + geoip + map)"
+        echo "2)  Domain Recon              (theHarvester + whois + dnsenum + map)"
+        echo "3)  EXIF Forensics            (exiftool + GPS map)"
+        echo "4)  Port / Service Scan       (nmap)"
+        echo "5)  Wi-Fi / BSSID Recon       (aircrack-ng)"
+        echo "6)  Canary Token              (generate / listen / logs)"
+        echo "7)  Subdomain Enumeration     (sublist3r / crt.sh)"
+        echo "8)  MAC Vendor Lookup"
+        echo "9)  Network Path Trace        (traceroute)"
+        echo "10) Hash Identifier"
+        echo "11) Generate Full HTML Report"
+        echo "12) View Audit Log"
+        echo "13) View Loot Directory"
+        echo "14) Export Everything (.zip)"
+        echo "d)  Check / Install Dependencies"
+        echo "0)  Exit"
+        echo -e "${GREEN}-------------------------------------------------------------${NC}"
         read -rp "Select an option: " choice
         case "$choice" in
             1) ip_intel ;;
@@ -375,14 +658,20 @@ main_menu() {
             4) port_scan ;;
             5) wifi_recon ;;
             6) canary_menu ;;
-            7) view_audit_log ;;
-            8) view_loot ;;
-            9) export_all ;;
+            7) subdomain_enum ;;
+            8) mac_lookup ;;
+            9) trace_path ;;
+            10) hash_identify ;;
+            11) generate_report ;;
+            12) view_audit_log ;;
+            13) view_loot ;;
+            14) export_all ;;
             d|D) check_all_deps ;;
-            0) echo "Bye."; exit 0 ;;
+            0) type_effect ">> session terminated." 0.02; exit 0 ;;
             *) ;;
         esac
     done
 }
 
+boot_sequence
 main_menu
