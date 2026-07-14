@@ -128,54 +128,19 @@ show_on_map() {
 
     print_box "COORDINATES LOCKED" "TARGET : ${label}" "LAT    : ${lat}" "LON    : ${lon}"
 
-    local mapfile="$LOOT_DIR/map_$(date +%s).html"
-    cat > "$mapfile" << MAPEOF
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>AaryanXSky — GeoTrace</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    :root { --g:#00ff66; }
-    body { margin:0; font-family:'Courier New', monospace; background:#050505; color:var(--g); }
-    #hud {
-      display:flex; justify-content:space-between; align-items:center;
-      padding:10px 18px; border-bottom:1px solid rgba(0,255,102,0.4);
-      background:rgba(0,0,0,0.9); text-shadow:0 0 6px rgba(0,255,102,0.6);
-      letter-spacing:1px; font-size:14px;
-    }
-    #hud .blink { animation: blink 1s steps(2) infinite; }
-    @keyframes blink { 50% { opacity:0; } }
-    #map { height: calc(100vh - 46px); width: 100%; filter: saturate(0.6) contrast(1.1); }
-    .leaflet-popup-content-wrapper { background:#0d0d0d; color:var(--g); border:1px solid var(--g); }
-    .leaflet-popup-tip { background:#0d0d0d; }
-  </style>
-</head>
-<body>
-  <div id="hud">
-    <div>[GEOTRACE] TARGET: ${label//\"/}</div>
-    <div>LAT ${lat} / LON ${lon} <span class="blink">●</span> LIVE</div>
-  </div>
-  <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([${lat}, ${lon}], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-    const crosshair = L.divIcon({
-      className: '', iconSize: [26,26],
-      html: '<div style="width:26px;height:26px;border:2px solid #00ff66;border-radius:50%;box-shadow:0 0 12px #00ff66;position:relative;"><div style="position:absolute;top:50%;left:-6px;width:38px;height:1px;background:#00ff66;"></div><div style="position:absolute;left:50%;top:-6px;height:38px;width:1px;background:#00ff66;"></div></div>'
-    });
-    L.marker([${lat}, ${lon}], {icon: crosshair}).addTo(map)
-      .bindPopup("TARGET LOCKED<br>${label//\"/}<br>${lat}, ${lon}").openPopup();
-  </script>
-</body>
-</html>
-MAPEOF
+    # Google Earth web view — zoomed street-level, top-down tilt
+    local earth_url="https://earth.google.com/web/search/${lat},${lon}/@${lat},${lon},0a,1000d,35y,0h,0t,0r"
 
-    echo -e "${GREEN}[+] Map saved:${NC} $mapfile"
+    echo -e "${GREEN}[+] Google Earth link:${NC} $earth_url"
+    log_action "map_view label=${label} lat=${lat} lon=${lon} url=${earth_url}"
+
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$earth_url" >/dev/null 2>&1 &
+        disown 2>/dev/null
+        echo -e "${YELLOW}Opening in default browser...${NC}"
+    else
+        echo -e "${YELLOW}xdg-open not found. Open the link above manually.${NC}"
+    fi
     if command -v xdg-open >/dev/null 2>&1; then
         xdg-open "$mapfile" >/dev/null 2>&1 &
     elif command -v sensible-browser >/dev/null 2>&1; then
